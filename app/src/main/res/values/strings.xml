@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Tunnel Mate Client</string>
+    <string name="vpn_permission">อนุญาต VPN เพื่อส่งเน็ตผ่าน Proxy ของเครื่องหลัก</string>
+</resources>
