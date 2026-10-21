@@ -1,13 +1,16 @@
 package com.tunnelmate.client;
 
+import android.Manifest;
 import android.content.ClipData;
 import android.content.ClipboardManager;
 import android.content.Context;
 import android.content.Intent;
+import android.content.pm.PackageManager;
 import android.net.VpnService;
 import android.os.Build;
 import android.os.Bundle;
 import android.widget.TextView;
+import android.widget.Toast;
 
 import androidx.activity.result.ActivityResultLauncher;
 import androidx.activity.result.contract.ActivityResultContracts;
@@ -17,6 +20,8 @@ import androidx.core.content.ContextCompat;
 
 import com.google.android.material.button.MaterialButton;
 import com.google.android.material.textfield.TextInputEditText;
+import com.journeyapps.barcodescanner.ScanContract;
+import com.journeyapps.barcodescanner.ScanOptions;
 
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -25,7 +30,7 @@ public class ClientMainActivity extends AppCompatActivity {
 
     private ClientPrefs prefs;
     private TextInputEditText edtHost, edtPort, edtUser, edtPass;
-    private MaterialButton btnConnect, btnPaste;
+    private MaterialButton btnConnect, btnPaste, btnScanQr;
     private TextView txtStatus;
 
     private final ActivityResultLauncher<Intent> vpnPermissionLauncher =
@@ -35,6 +40,29 @@ public class ClientMainActivity extends AppCompatActivity {
                 } else {
                     setStatus("ไม่ได้อนุญาต VPN", false);
                 }
+            });
+
+    /** ขอสิทธิ์กล้องก่อนสแกน QR */
+    private final ActivityResultLauncher<String> cameraPermissionLauncher =
+            registerForActivityResult(new ActivityResultContracts.RequestPermission(), granted -> {
+                if (granted) {
+                    launchQrScanner();
+                } else {
+                    Toast.makeText(this, "ต้องอนุญาตกล้องเพื่อสแกน QR", Toast.LENGTH_LONG).show();
+                }
+            });
+
+    /** ผลสแกน QR */
+    private final ActivityResultLauncher<ScanOptions> qrScanLauncher =
+            registerForActivityResult(new ScanContract(), result -> {
+                if (result == null || result.getContents() == null) {
+                    setStatus("ยกเลิกการสแกน", false);
+                    return;
+                }
+                String content = result.getContents().trim();
+                applyConfigText(content);
+                setStatus("นำเข้าจาก QR แล้ว", false);
+                Toast.makeText(this, "อ่าน QR สำเร็จ", Toast.LENGTH_SHORT).show();
             });
 
     @Override
@@ -49,6 +77,7 @@ public class ClientMainActivity extends AppCompatActivity {
         edtPass = findViewById(R.id.edtPass);
         btnConnect = findViewById(R.id.btnConnect);
         btnPaste = findViewById(R.id.btnPaste);
+        btnScanQr = findViewById(R.id.btnScanQr);
         txtStatus = findViewById(R.id.txtStatus);
 
         edtHost.setText(prefs.getHost());
@@ -58,8 +87,10 @@ public class ClientMainActivity extends AppCompatActivity {
 
         btnConnect.setOnClickListener(v -> toggleConnect());
         btnPaste.setOnClickListener(v -> pasteFromClipboard());
+        if (btnScanQr != null) {
+            btnScanQr.setOnClickListener(v -> startQrScan());
+        }
 
-        // รับข้อความแชร์จากแอปอื่น
         handleSendIntent(getIntent());
         refreshStatus();
     }
@@ -76,6 +107,31 @@ public class ClientMainActivity extends AppCompatActivity {
         refreshStatus();
     }
 
+    // ============================================================
+    // QR Scan
+    // ============================================================
+    private void startQrScan() {
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA)
+                == PackageManager.PERMISSION_GRANTED) {
+            launchQrScanner();
+        } else {
+            cameraPermissionLauncher.launch(Manifest.permission.CAMERA);
+        }
+    }
+
+    private void launchQrScanner() {
+        ScanOptions options = new ScanOptions();
+        options.setDesiredBarcodeFormats(ScanOptions.QR_CODE);
+        options.setPrompt("สแกน QR จากหน้าแชร์ VPN ของเครื่องหลัก");
+        options.setBeepEnabled(true);
+        options.setOrientationLocked(true);
+        options.setCaptureActivity(QrCaptureActivity.class);
+        qrScanLauncher.launch(options);
+    }
+
+    // ============================================================
+    // Status / Connect
+    // ============================================================
     private void refreshStatus() {
         if (ClientVpnService.isRunning()) {
             setStatus("● เชื่อมต่อแล้ว", true);
@@ -154,13 +210,22 @@ public class ClientMainActivity extends AppCompatActivity {
         return e.getText().toString().trim();
     }
 
+    // ============================================================
+    // Import: Clipboard / Share / QR
+    // ============================================================
     private void pasteFromClipboard() {
         ClipboardManager cm = (ClipboardManager) getSystemService(Context.CLIPBOARD_SERVICE);
-        if (cm == null || cm.getPrimaryClip() == null) return;
+        if (cm == null || cm.getPrimaryClip() == null) {
+            Toast.makeText(this, "Clipboard ว่าง", Toast.LENGTH_SHORT).show();
+            return;
+        }
         ClipData.Item item = cm.getPrimaryClip().getItemAt(0);
         if (item == null) return;
         CharSequence t = item.coerceToText(this);
-        if (t != null) applyConfigText(t.toString());
+        if (t != null) {
+            applyConfigText(t.toString());
+            Toast.makeText(this, "วางจาก Clipboard แล้ว", Toast.LENGTH_SHORT).show();
+        }
     }
 
     private void handleSendIntent(Intent intent) {
@@ -174,18 +239,15 @@ public class ClientMainActivity extends AppCompatActivity {
     }
 
     /**
-     * รองรับข้อความจากแอปหลัก เช่น:
-     * โฮสต์: 10.158.76.80
-     * พอร์ต: 1080
-     * Username: vpnshare
-     * Password: xxx
-     * หรือ socks5://user:pass@ip:port
+     * รองรับ:
+     * - socks5://user:pass@host:port
+     * - ข้อความจากแอปหลัก (โฮสต์ / พอร์ต / Username / Password)
+     * - IP:port ล้วน ๆ
      */
     private void applyConfigText(String raw) {
         if (raw == null || raw.trim().isEmpty()) return;
         String text = raw.trim();
 
-        // socks5://user:pass@host:port
         Pattern uri = Pattern.compile(
                 "socks5://(?:([^:@/]+):([^@/]*)@)?([^:/\\s]+):(\\d+)",
                 Pattern.CASE_INSENSITIVE);
@@ -200,9 +262,8 @@ public class ClientMainActivity extends AppCompatActivity {
             return;
         }
 
-        // โฮสต์: x.x.x.x
         Matcher host = Pattern.compile(
-                "(?:โฮสต์|host|ip)\\s*[:：]\\s*([0-9.]+)",
+                "(?:โฮสต์|host|ip)\\s*[:：]\\s*([0-9.a-zA-Z\\-]+)",
                 Pattern.CASE_INSENSITIVE).matcher(text);
         if (host.find()) edtHost.setText(host.group(1));
 
@@ -221,7 +282,6 @@ public class ClientMainActivity extends AppCompatActivity {
                 Pattern.CASE_INSENSITIVE).matcher(text);
         if (pass.find()) edtPass.setText(pass.group(1));
 
-        // IP:port ล้วน ๆ
         Matcher ipPort = Pattern.compile("\\b(\\d{1,3}(?:\\.\\d{1,3}){3}):(\\d{2,5})\\b")
                 .matcher(text);
         if (ipPort.find() && textOf(edtHost).isEmpty()) {

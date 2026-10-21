@@ -130,12 +130,25 @@
             android:text="วางจาก Clipboard (ข้อความจากเครื่องหลัก)"
             app:cornerRadius="12dp" />
 
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btnScanQr"
+            style="@style/Widget.Material3.Button.OutlinedButton"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:text="สแกน QR จากเครื่องหลัก"
+            app:cornerRadius="12dp"
+            app:icon="@android:drawable/ic_menu_camera"
+            app:iconGravity="textStart"
+            app:iconPadding="8dp"
+            app:iconTint="@color/green" />
+
         <TextView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="24dp"
             android:lineSpacingExtra="3dp"
-            android:text="วิธีใช้\n1) เครื่องหลักเปิดแชร์ SOCKS5 + เชื่อม VPN\n2) เครื่องลูกเชื่อม Wi‑Fi/Hotspot เดียวกับเครื่องหลัก\n3) กรอก IP ที่เครื่องหลักแสดง (หรือกดวางจาก Clipboard)\n4) กดเชื่อมต่อ แล้วอนุญาต VPN\n\nแอปนี้จะส่งเน็ตทั้งเครื่องผ่าน Proxy ของเครื่องหลัก"
+            android:text="วิธีใช้\n1) เครื่องหลักเปิดแชร์ SOCKS5 + เชื่อม VPN\n2) เครื่องลูกเชื่อม Wi‑Fi/Hotspot เดียวกับเครื่องหลัก\n3) สแกน QR / วาง Clipboard / กรอก IP\n4) กดเชื่อมต่อ แล้วอนุญาต VPN\n\nแอปนี้จะส่งเน็ตทั้งเครื่องผ่าน Proxy ของเครื่องหลัก"
             android:textColor="@color/muted"
             android:textSize="13sp" />
     </LinearLayout>
